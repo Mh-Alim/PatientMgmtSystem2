@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  billing-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: billing-grpc-service
+    ports:
+      - "4001:4001"
+      - "9001:9001"
+    environment:
+      - SPRING_PROFILES_ACTIVE=default
+    restart: no
+    networks:
+      - shared-network # Attach the service to the network
+
+# Define the network as external
+networks:
+  shared-network:
+    name: hospital-shared-network
+    external: true
