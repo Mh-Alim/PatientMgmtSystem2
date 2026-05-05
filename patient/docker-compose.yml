@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # 1. The Database
+  postgres-db:
+    image: postgres:15
+    container_name: patient_management_db
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_DB: patient_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - shared-network
+
+  # 2. Your Spring Boot App
+  patient-service:
+    image: patient-service:1.0
+    container_name: patient_backend
+    ports:
+      - "4000:4000"
+    depends_on:
+      - postgres-db
+    networks:
+      - shared-network
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/patient_db
+      SPRING_DATASOURCE_USERNAME: admin
+      SPRING_DATASOURCE_PASSWORD: secretpassword
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+      BILLING_SERVICE_ADDRESS: billing-service
+      BILLING_SERVICE_GRPC_PORT: 9001
+
+# 3. Defining the Network with an explicit name
+networks:
+  shared-network:
+    name: hospital-shared-network
+    driver: bridge
+
+# 4. Defining the Volume
+volumes:
+  postgres_data:
