@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+
+  # ============================================================
+  # 1. PostgreSQL Database
+  # ============================================================
+
+  postgres-db:
+    image: postgres:15
+    container_name: patient_management_db
+    restart: always
+
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_DB: patient_db
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    networks:
+      - shared-network
+
+
+  # ============================================================
+  # 2. Patient Service
+  # ============================================================
+
+  patient-service:
+    image: patient-service:1.0
+    container_name: patient_backend
+
+    ports:
+      - "4000:4000"
+
+    depends_on:
+      - postgres-db
+
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/patient_db
+      SPRING_DATASOURCE_USERNAME: admin
+      SPRING_DATASOURCE_PASSWORD: secretpassword
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+
+      BILLING_SERVICE_ADDRESS: billing-service
+      BILLING_SERVICE_GRPC_PORT: 9001
+
+    networks:
+      - shared-network
+
+
+  # ============================================================
+  # 3. Billing Service
+  # ============================================================
+
+  billing-service:
+    build:
+      context: ./billing-service
+      dockerfile: Dockerfile
+
+    container_name: billing-grpc-service
+
+    ports:
+      - "4001:4001"
+      - "9001:9001"
+
+    environment:
+      SPRING_PROFILES_ACTIVE: default
+
+    restart: "no"
+
+    networks:
+      - shared-network
+
+
+# ==============================================================
+# Network
+# ==============================================================
+
+networks:
+  shared-network:
+    name: hospital-shared-network
+    driver: bridge
+
+
+# ==============================================================
+# Volume
+# ==============================================================
+
+volumes:
+  postgres_data:
