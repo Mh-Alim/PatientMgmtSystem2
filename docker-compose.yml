@@ -1,3 +1,4 @@
+
 version: '3.8'
 
 services:
@@ -5,7 +6,6 @@ services:
   # ============================================================
   # 1. PostgreSQL Database
   # ============================================================
-
   postgres-db:
     image: postgres:15
     container_name: patient_management_db
@@ -27,18 +27,75 @@ services:
 
 
   # ============================================================
-  # 2. Patient Service
+  # 2. Kafka Broker (KRaft mode - No ZooKeeper)
   # ============================================================
+  kafka:
+    image: apache/kafka:4.1.1
+    container_name: broker
+    restart: unless-stopped
 
+    ports:
+      - "9094:9094"
+
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+
+      KAFKA_LISTENERS: INTERNAL://:9092,EXTERNAL://:9094,CONTROLLER://:9093
+
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:9094
+
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+    networks:
+      - shared-network
+
+
+  # ============================================================
+  # 3. Patient Service
+  # ============================================================
   patient-service:
     image: patient-service:1.0
     container_name: patient_backend
+
+    build:
+      context: ./patient
+      dockerfile: Dockerfile
 
     ports:
       - "4000:4000"
 
     depends_on:
-      - postgres-db
+      postgres-db:
+        condition: service_started
+      kafka:
+        condition: service_healthy
 
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/patient_db
@@ -51,14 +108,15 @@ services:
       BILLING_SERVICE_ADDRESS: billing-service
       BILLING_SERVICE_GRPC_PORT: 9001
 
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
     networks:
       - shared-network
 
 
   # ============================================================
-  # 3. Billing Service
+  # 4. Billing Service
   # ============================================================
-
   billing-service:
     build:
       context: ./billing-service
@@ -79,19 +137,18 @@ services:
       - shared-network
 
 
-# ==============================================================
+# ============================================================
 # Network
-# ==============================================================
-
+# ============================================================
 networks:
   shared-network:
     name: hospital-shared-network
     driver: bridge
 
 
-# ==============================================================
-# Volume
-# ==============================================================
-
+# ============================================================
+# Volumes
+# ============================================================
 volumes:
   postgres_data:
+  kafka_data:
