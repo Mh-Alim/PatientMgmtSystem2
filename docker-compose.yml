@@ -1,7 +1,7 @@
 services:
 
   # ============================================================
-  # 1. PostgreSQL Database
+  # 1. Patient PostgreSQL Database
   # ============================================================
   postgres-db:
     image: postgres:15
@@ -15,6 +15,29 @@ services:
 
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+    networks:
+      - shared-network
+
+
+  # ============================================================
+  # 1B. Auth PostgreSQL Database
+  # ============================================================
+  auth-db:
+    image: postgres:15
+    container_name: auth_management_db
+    restart: always
+
+    ports:
+      - "5433:5432"
+
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_DB: auth_db
+
+    volumes:
+      - auth_postgres_data:/var/lib/postgresql/data
 
     networks:
       - shared-network
@@ -149,7 +172,37 @@ services:
 
 
   # ============================================================
-  # 6. API Gateway
+  # 6. Auth Service (NEW)
+  # ============================================================
+  auth-service:
+    image: auth-service:1.0
+    container_name: auth_backend
+
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+
+    depends_on:
+      auth-db:
+        condition: service_started
+
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://auth-db:5432/auth_db
+      SPRING_DATASOURCE_USERNAME: admin
+      SPRING_DATASOURCE_PASSWORD: secretpassword
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+      JWT_SECRET: your-256-bit-secret-key-change-this-in-production
+
+    restart: unless-stopped
+
+    networks:
+      - shared-network
+
+
+  # ============================================================
+  # 7. API Gateway
   # ============================================================
   api-gateway:
     image: api-gateway:1.0
@@ -166,6 +219,7 @@ services:
       - patient-service
       - billing-service
       - analytics-service
+      - auth-service
 
     restart: unless-stopped
 
@@ -187,4 +241,5 @@ networks:
 # ============================================================
 volumes:
   postgres_data:
+  auth_postgres_data:
   kafka_data:
